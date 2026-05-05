@@ -128,7 +128,7 @@ Resposta esperada (HTTP 207 Multi-Status):
 **O que acontece**:
 - As três mensagens são publicadas no tópico `jobs`
 - O consumer sequencial as processa uma por uma
-- O consumer batch as acumula e processa em um lote (máx 10 mensagens ou após 5 segundos)
+- O consumer batch as processa imediatamente em um lote (até máx 10 mensagens disponíveis no canal)
 
 ---
 
@@ -300,16 +300,16 @@ go func() {
 **Decisão**: O consumer batch **não aguarda acumular exatamente N mensagens**; processa o que está disponível agora (até máx N).
 
 **Motivo**:
-- Evita latência artificial em baixo volume (não fica aguardando encher o lote)
-- Aproveita mensagens que já chegaram, mas não bloqueia
-- Usa timeout (`5s` por padrão) para não ficar infinitamente esperando
+- Evita latência artificial: assim que a primeira mensagem chega, drena o restante do canal sem bloquear
+- O timeout (`5s` por padrão) só entra em ação quando o canal está **completamente vazio** — serve apenas para não bloquear indefinidamente quando não há mensagens
 - Melhor experiência em testes e baixa carga
 
 **Implementação** (internal/batch/accumulator.go):
 ```go
 // NextBatch retorna:
-// - Até maxSize mensagens se houver
-// - Menos mensagens se timeout for atingido
+// - Até maxSize mensagens, processadas imediatamente ao chegar a primeira
+// - Menos mensagens se o canal esvaziar antes de atingir maxSize
+// - Vazio se o timeout for atingido sem nenhuma mensagem
 // - Nenhuma se contexto for cancelado
 ```
 
@@ -628,7 +628,7 @@ Após subir a infraestrutura, acesse **http://localhost:8080** para:
 
 ### Consumer batch não processa em tempo real
 
-**Comportamento esperado**: Consumer batch aguarda até 5 segundos ou 10 mensagens (configurável) antes de processar.
+**Comportamento esperado**: Consumer batch processa imediatamente ao receber a primeira mensagem, drenando o canal até `KAFKA_BATCH_SIZE` mensagens sem bloquear. O timeout de 5 segundos (configurável) só se aplica quando o canal está completamente vazio.
 
 **Se quiser processar mais rápido**:
 ```bash
