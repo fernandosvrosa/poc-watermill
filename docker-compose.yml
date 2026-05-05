@@ -1,0 +1,81 @@
+version: '3.9'
+
+services:
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: poc-kafka
+    hostname: kafka
+    ports:
+      - "9092:9092"
+      - "9094:9094"
+    environment:
+      KAFKA_CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_CLEANUP_POLICY: delete
+      KAFKA_LOG_RETENTION_HOURS: 24
+    command:
+      - bash
+      - -c
+      - |
+        kafka-storage format -t $$KAFKA_CLUSTER_ID -c /etc/kafka/kraft/server.properties &&
+        /etc/confluent/docker/run
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - poc-network
+
+  console:
+    image: redpandadata/console:latest
+    container_name: poc-console
+    hostname: console
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BROKERS: kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - poc-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poc-app
+    hostname: app
+    ports:
+      - "8090:${APP_PORT:-8090}"
+    environment:
+      APP_PORT: ${APP_PORT:-8090}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-jobs}
+      KAFKA_DLQ_TOPIC: ${KAFKA_DLQ_TOPIC:-jobs_dlq}
+      KAFKA_CONSUMER_GROUP_SEQUENTIAL: ${KAFKA_CONSUMER_GROUP_SEQUENTIAL:-poc-sequential}
+      KAFKA_CONSUMER_GROUP_BATCH: ${KAFKA_CONSUMER_GROUP_BATCH:-poc-batch}
+      KAFKA_BATCH_SIZE: ${KAFKA_BATCH_SIZE:-10}
+      KAFKA_BATCH_TIMEOUT: ${KAFKA_BATCH_TIMEOUT:-5s}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - poc-network
+
+networks:
+  poc-network:
+    driver: bridge
