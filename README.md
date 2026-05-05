@@ -24,7 +24,7 @@ Este projeto implementa dois padrões de consumo:
 
 Assegure-se de estar no diretório raiz do projeto:
 ```bash
-cd /caminho/para/poc-watermill/.worktrees/poc-echo-watermill-kafka
+cd /caminho/para/poc-watermill
 ```
 
 ### Passo 2: Subir os containers
