@@ -2,7 +2,7 @@
 
 Projeto novo (POC) em Go validando o Watermill como abstração de Pub/Sub sobre Kafka. O objetivo principal é demonstrar que o padrão de handlers e middlewares já utilizado com SQS/SNS pode ser reaproveitado trocando apenas o adapter de transporte. Não há código legado — todas as decisões partem do zero.
 
-Stack escolhida: Go + Echo (HTTP) + Watermill + watermill-kafka/v3 (usa franz-go internamente) + Kafka em modo KRaft.
+Stack escolhida: Go + Echo (HTTP) + Watermill + watermill-kafka/v3 (usa IBM/sarama internamente) + Kafka em modo KRaft.
 
 ## Goals / Non-Goals
 
@@ -23,13 +23,15 @@ Stack escolhida: Go + Echo (HTTP) + Watermill + watermill-kafka/v3 (usa franz-go
 
 ## Decisions
 
-### D1: watermill-kafka/v3 em vez de franz-go direto
+### D1: watermill-kafka/v3 em vez de client Kafka direto
 
-**Decisão**: Usar `watermill-kafka/v3` como adapter Kafka, que usa franz-go internamente.
+**Decisão**: Usar `watermill-kafka/v3` como adapter Kafka.
 
-**Rationale**: O objetivo da POC é validar a abstração do Watermill — não construir um adapter customizado. O watermill-kafka/v3 expõe as opções franz-go via `AdditionalFranzOptions` quando necessário, dando controle sem perder a integração oficial.
+**Detalhe**: o `watermill-kafka/v3` usa **IBM/sarama** como client Kafka internamente (não franz-go, como inicialmente suposto). A configuração de baixo nível é exposta via `OverwriteSaramaConfig` com `kafka.DefaultSaramaSubscriberConfig()` como base.
 
-**Alternativa descartada**: Implementar `watermill.Publisher`/`watermill.Subscriber` manualmente com franz-go — mais código, menos foco no objetivo da POC.
+**Rationale**: O objetivo da POC é validar a abstração do Watermill — não construir um adapter customizado. Usando o adapter oficial, a lógica dos handlers permanece agnóstica ao broker.
+
+**Alternativa descartada**: Implementar `watermill.Publisher`/`watermill.Subscriber` manualmente usando sarama ou franz-go diretamente — mais código, menos foco no objetivo da POC.
 
 ---
 
@@ -91,6 +93,6 @@ Stack escolhida: Go + Echo (HTTP) + Watermill + watermill-kafka/v3 (usa franz-go
 |---|---|
 | Mensagem perdida se processo morrer entre o processamento do lote e o ACK | Aceitável para POC; em produção usar transações Kafka ou `enable.auto.commit=false` com commit manual após ACK |
 | Kafka KRaft requer formatação de storage no primeiro start | Usar `command` no Docker Compose para executar `kafka-storage format` antes de subir o broker |
-| watermill-kafka/v3 API pode diferir da v2 (sem sarama) | Ler documentação atualizada; configurações de sarama não existem mais na v3 |
+| watermill-kafka/v3 usa IBM/sarama (não franz-go como inicialmente suposto) | A API de configuração é via `OverwriteSaramaConfig`; `AdditionalFranzOptions` não existe nesta versão |
 | Dois consumer groups consumindo o mesmo tópico dobram o throughput de processamento na POC | Intencional para demonstração; em produção cada grupo teria sua própria responsabilidade |
 | Batch handler fora do Router não usa middlewares do Watermill | DLQ e retry implementados manualmente no batch handler com a mesma semântica |

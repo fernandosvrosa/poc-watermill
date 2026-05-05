@@ -13,7 +13,7 @@ Este projeto implementa dois padrões de consumo:
 - **Docker** e **Docker Compose** instalados
   - Docker Desktop (Windows/macOS) ou Docker + Docker Compose (Linux)
   - Testado com Docker 20.10+ e Docker Compose 1.29+
-- **Go 1.22+** (opcional, apenas se executar localmente sem Docker)
+- **Go 1.25+** (opcional, apenas se executar localmente sem Docker)
 - **curl** ou similar para testar os endpoints (já disponível em macOS/Linux)
 
 ---
@@ -246,14 +246,16 @@ KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
 
 ---
 
-### 2. Watermill-Kafka/v3 vs Franz-Go Direto
+### 2. Watermill-Kafka/v3 vs Client Kafka Direto
 
 **Decisão**: Usar **watermill-kafka/v3** (adapter Watermill para Kafka).
+
+**Detalhe de implementação**: o `watermill-kafka/v3` usa **IBM/sarama** como client Kafka internamente (não franz-go). A configuração de baixo nível é feita via `kafka.DefaultSaramaSubscriberConfig()` e `OverwriteSaramaConfig`.
 
 **Motivo**:
 - O objetivo da POC é validar a abstração Watermill, não construir um adapter customizado
 - Watermill abstrai Publisher e Subscriber, permitindo trocar o broker sem mudar os handlers
-- Franz-go direto não teria essa portabilidade
+- Implementar o client Kafka (sarama ou franz-go) diretamente não teria essa portabilidade
 - Os middlewares (Retry, PoisonQueue) operam na camada Watermill
 
 **Implicação**:
