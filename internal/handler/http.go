@@ -10,22 +10,28 @@ import (
 )
 
 const publisherKey = "publisher"
+const topicKey = "topic"
 
-func PublisherMiddleware(pub message.Publisher) echo.MiddlewareFunc {
+func PublisherMiddleware(pub message.Publisher, topic string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			c.Set(publisherKey, pub)
+			c.Set(topicKey, topic)
 			return next(c)
 		}
 	}
 }
 
-func getPublisher(c echo.Context) (message.Publisher, error) {
+func getPublisher(c echo.Context) (message.Publisher, string, error) {
 	pub, ok := c.Get(publisherKey).(message.Publisher)
 	if !ok || pub == nil {
-		return nil, fmt.Errorf("publisher não disponível no contexto")
+		return nil, "", fmt.Errorf("publisher não disponível no contexto")
 	}
-	return pub, nil
+	topic, _ := c.Get(topicKey).(string)
+	if topic == "" {
+		return nil, "", fmt.Errorf("tópico não disponível no contexto")
+	}
+	return pub, topic, nil
 }
 
 type publishSingleRequest struct {
@@ -42,7 +48,7 @@ func PublishSingle(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "campos 'id' e 'payload' são obrigatórios"})
 	}
 
-	pub, err := getPublisher(c)
+	pub, topic, err := getPublisher(c)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -50,7 +56,7 @@ func PublishSingle(c echo.Context) error {
 	msg := message.NewMessage(watermill.NewUUID(), []byte(req.Payload))
 	msg.Metadata.Set("id", req.ID)
 
-	if err := pub.Publish("jobs", msg); err != nil {
+	if err := pub.Publish(topic, msg); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
@@ -74,7 +80,7 @@ func PublishBatch(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "body inválido"})
 	}
 
-	pub, err := getPublisher(c)
+	pub, topic, err := getPublisher(c)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
@@ -91,7 +97,7 @@ func PublishBatch(c echo.Context) error {
 		msg := message.NewMessage(watermill.NewUUID(), []byte(item.Payload))
 		msg.Metadata.Set("id", item.ID)
 
-		if err := pub.Publish("jobs", msg); err != nil {
+		if err := pub.Publish(topic, msg); err != nil {
 			result.Error = err.Error()
 		} else {
 			result.OK = true

@@ -45,7 +45,7 @@ func main() {
 
 	e := echo.New()
 	e.HideBanner = true
-	e.Use(handler.PublisherMiddleware(publisher))
+	e.Use(handler.PublisherMiddleware(publisher, cfg.KafkaTopic))
 	e.POST("/publish/single", handler.PublishSingle)
 	e.POST("/publish/batch", handler.PublishBatch)
 	e.GET("/health", handler.HealthCheck)
