@@ -12,20 +12,22 @@ import (
 func NextBatch(ctx context.Context, msgChan <-chan *message.Message, maxSize int, timeout time.Duration) []*message.Message {
 	var batch []*message.Message
 
-	// Aguarda primeira mensagem, timeout ou cancelamento de contexto
+	// NewTimer + Stop evita o vazamento de goroutines que time.After causa em loops.
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
 	select {
 	case msg, ok := <-msgChan:
 		if !ok {
 			return nil
 		}
 		batch = append(batch, msg)
-	case <-time.After(timeout):
-		return batch // retorna vazio após timeout
+	case <-timer.C:
+		return batch
 	case <-ctx.Done():
 		return batch
 	}
 
-	// Drena o restante do canal sem bloquear até atingir maxSize
 	for len(batch) < maxSize {
 		select {
 		case msg, ok := <-msgChan:
@@ -34,7 +36,7 @@ func NextBatch(ctx context.Context, msgChan <-chan *message.Message, maxSize int
 			}
 			batch = append(batch, msg)
 		default:
-			return batch // canal vazio agora, retorna o que foi coletado
+			return batch
 		}
 	}
 

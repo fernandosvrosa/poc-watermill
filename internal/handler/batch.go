@@ -10,20 +10,17 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-// processaMensagem verifica se o payload contém "fail-batch" e retorna erro.
 // Critério compartilhado entre ProcessBatch e ProcessIndividual.
-func processaMensagem(msg *message.Message) error {
+func processMessage(msg *message.Message) error {
 	if strings.Contains(string(msg.Payload), "fail-batch") {
 		return fmt.Errorf("falha simulada para mensagem id=%s", msg.UUID)
 	}
 	return nil
 }
 
-// ProcessBatch processa um lote de mensagens.
-// Retorna erro se qualquer mensagem do lote contém "fail-batch" no payload.
 func ProcessBatch(msgs []*message.Message) error {
 	for _, msg := range msgs {
-		if err := processaMensagem(msg); err != nil {
+		if err := processMessage(msg); err != nil {
 			return err
 		}
 	}
@@ -31,8 +28,7 @@ func ProcessBatch(msgs []*message.Message) error {
 	return nil
 }
 
-// ProcessIndividual processa uma mensagem individualmente com até 3 tentativas.
-// Se esgotar os retries, publica no DLQ e retorna nil (mensagem foi para DLQ).
+// ProcessIndividual retorna nil em todos os caminhos: sucesso, ou falha enviada ao DLQ.
 func ProcessIndividual(ctx context.Context, msg *message.Message, publisher message.Publisher, dlqTopic string) error {
 	id := msg.Metadata.Get("id")
 	if id == "" {
@@ -42,26 +38,27 @@ func ProcessIndividual(ctx context.Context, msg *message.Message, publisher mess
 	const maxAttempts = 3
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		// Aplica backoff entre tentativas (exceto na primeira)
 		if attempt > 1 {
-			time.Sleep(time.Duration(attempt) * 100 * time.Millisecond)
+			select {
+			case <-time.After(time.Duration(attempt) * 100 * time.Millisecond):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 
-		err := processaMensagem(msg)
-		if err == nil {
+		if err := processMessage(msg); err == nil {
 			slog.Info("mensagem processada individualmente", "id", id, "tentativa", attempt)
 			return nil
 		}
 
-		slog.Warn("tentativa falhou", "id", id, "tentativa", attempt, "erro", err)
+		slog.Warn("tentativa falhou", "id", id, "tentativa", attempt)
 	}
 
-	// Esgotou retries — envia para DLQ
 	if err := publisher.Publish(dlqTopic, msg); err != nil {
 		slog.Error("falha ao publicar no DLQ", "id", id, "erro", err)
 		return err
 	}
 
 	slog.Warn("mensagem enviada para DLQ", "id", id)
-	return nil // não propaga erro — a mensagem foi para DLQ
+	return nil
 }
