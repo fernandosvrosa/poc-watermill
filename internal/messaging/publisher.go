@@ -7,7 +7,6 @@ import (
 	"poc-watermill/internal/config"
 )
 
-// NewPublisher cria e retorna um publisher Kafka configurado com as opções da aplicação.
 func NewPublisher(cfg config.Config) (message.Publisher, error) {
 	logger := watermill.NewStdLogger(false, false)
 

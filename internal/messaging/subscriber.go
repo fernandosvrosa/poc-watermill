@@ -8,39 +8,28 @@ import (
 	"poc-watermill/internal/config"
 )
 
-// newSaramaConfig cria um sarama.Config com offset inicial configurado para OffsetNewest.
+// OffsetNewest evita reprocessar mensagens históricas ao reiniciar em ambiente de dev/POC.
 func newSaramaConfig() *sarama.Config {
 	cfg := kafka.DefaultSaramaSubscriberConfig()
 	cfg.Consumer.Offsets.Initial = sarama.OffsetNewest
 	return cfg
 }
 
-// NewSubscriberSequential cria e retorna um subscriber Kafka para processamento sequencial.
-// Utiliza o consumer group configurado em KafkaConsumerGroupSeq.
-func NewSubscriberSequential(cfg config.Config) (message.Subscriber, error) {
+func newSubscriber(cfg config.Config, group string) (message.Subscriber, error) {
 	logger := watermill.NewStdLogger(false, false)
-
 	subscriberCfg := kafka.SubscriberConfig{
 		Brokers:               cfg.KafkaBrokers,
 		Unmarshaler:           kafka.DefaultMarshaler{},
-		ConsumerGroup:         cfg.KafkaConsumerGroupSeq,
+		ConsumerGroup:         group,
 		OverwriteSaramaConfig: newSaramaConfig(),
 	}
-
 	return kafka.NewSubscriber(subscriberCfg, logger)
 }
 
-// NewSubscriberBatch cria e retorna um subscriber Kafka para processamento em batch.
-// Utiliza o consumer group configurado em KafkaConsumerGroupBatch.
+func NewSubscriberSequential(cfg config.Config) (message.Subscriber, error) {
+	return newSubscriber(cfg, cfg.KafkaConsumerGroupSeq)
+}
+
 func NewSubscriberBatch(cfg config.Config) (message.Subscriber, error) {
-	logger := watermill.NewStdLogger(false, false)
-
-	subscriberCfg := kafka.SubscriberConfig{
-		Brokers:               cfg.KafkaBrokers,
-		Unmarshaler:           kafka.DefaultMarshaler{},
-		ConsumerGroup:         cfg.KafkaConsumerGroupBatch,
-		OverwriteSaramaConfig: newSaramaConfig(),
-	}
-
-	return kafka.NewSubscriber(subscriberCfg, logger)
+	return newSubscriber(cfg, cfg.KafkaConsumerGroupBatch)
 }
